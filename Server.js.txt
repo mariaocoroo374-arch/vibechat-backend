@@ -1,0 +1,63 @@
+const express = require('express');
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const cors = require('cors');
+
+const app = express();
+app.use(express.json());
+app.use(cors());
+
+const JWT_SECRET = 'vibechat_clave_secreta_super_segura_2026';
+
+// Esquemas de Base de Datos
+const usuarioSchema = new mongoose.Schema({
+    nombre: String,
+    email: { type: String, unique: true },
+    passwordHash: String,
+    tokens: { type: Number, default: 100 }
+});
+
+const modeloSchema = new mongoose.Schema({
+    nombreArtistico: String,
+    email: { type: String, unique: true },
+    passwordHash: String,
+    tokensGenerados: { type: Number, default: 0 }
+});
+
+const Usuario = mongoose.model('Usuario', usuarioSchema);
+const Modelo = mongoose.model('Modelo', modeloSchema);
+
+// Rutas de prueba y login básica
+app.get('/', (req, res) => {
+    res.send('¡El servidor de VibeChat está en línea y funcionando!');
+});
+
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { email, password, tipo } = req.body;
+        let cuenta = tipo === 'modelo' ? await Modelo.findOne({ email }) : await Usuario.findOne({ email });
+        if (!cuenta) return res.status(404).json({ exito: false, mensaje: 'Cuenta no encontrada' });
+
+        const passwordValido = await bcrypt.compare(password, cuenta.passwordHash);
+        if (!passwordValido) return res.status(401).json({ exito: false, mensaje: 'Contraseña incorrecta' });
+
+        const tokenJWT = jwt.sign({ id: cuenta._id, tipo: tipo }, JWT_SECRET, { expiresIn: '7d' });
+        res.json({ exito: true, token: tokenJWT, nombre: cuenta.nombre || cuenta.nombreArtistico });
+    } catch (error) {
+        res.status(500).json({ exito: false, mensaje: 'Error en el servidor' });
+    }
+});
+
+// CONEXIÓN A MONGODB ATLAS (Usa la variable de entorno de Render o la URL directa)
+const PORT = process.env.PORT || 3000;
+const MONGO_URI = process.env.MONGO_URI || 'TU_URL_DE_MONGODB_ATLAS_AQUI';
+
+mongoose.connect(MONGO_URI)
+    .then(() => {
+        console.log('Base de datos conectada con éxito 🚀');
+        app.listen(PORT, () => {
+            console.log(`Servidor corriendo en puerto ${PORT}`);
+        });
+    })
+    .catch(err => console.error('Error al conectar DB:', err));
